@@ -13,3 +13,7 @@ pub type ToolCall {
 pub type AgentResult {
   AgentResult(output_text: String, usage: Usage)
 }
+
+pub type Plan {
+  Plan(steps: List(String), raw_text: String)
+}

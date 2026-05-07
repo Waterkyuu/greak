@@ -1,0 +1,172 @@
+import gleam/http
+import gleam/http/request
+import gleam/httpc
+import gleam/list
+import gleam/option.{None, Some}
+import gleam/result
+import gleam/string
+
+import greak/core/error.{type RuntimeError, ProviderError}
+import greak/model/openrouter/config.{type Config}
+import greak/model/openrouter/request as openrouter_request
+import greak/model/openrouter/response
+import greak/model/provider.{
+  type Provider, type ProviderRequest, type ProviderResponse,
+  StatelessConversation, new,
+}
+
+@external(erlang, "greak_openai_stream_ffi", "post_sse")
+fn post_sse(
+  url: String,
+  headers: List(#(String, String)),
+  body: String,
+  on_line: fn(String) -> Nil,
+) -> Result(String, String)
+
+pub fn provider(config: Config) -> Provider {
+  new(
+    conversation_mode: StatelessConversation,
+    invoke: fn(provider_request) { invoke(config, provider_request) },
+    invoke_stream: fn(provider_request, on_text_delta) {
+      invoke_stream(config, provider_request, on_text_delta)
+    },
+  )
+}
+
+pub fn invoke(
+  config: Config,
+  provider_request: ProviderRequest,
+) -> Result(ProviderResponse, RuntimeError) {
+  let body = build_body(config, provider_request, False)
+  let assert Ok(base_request) = request.to(config.base_url)
+
+  let http_request =
+    base_request
+    |> request.set_method(http.Post)
+    |> request.set_body(body)
+    |> add_headers(config)
+
+  let http_response_result =
+    httpc.send(http_request)
+    |> result.map_error(fn(_error) { ProviderError("http request failed") })
+
+  use http_response <- result.try(http_response_result)
+
+  response.decode_output(http_response.body)
+}
+
+pub fn invoke_stream(
+  config: Config,
+  provider_request: ProviderRequest,
+  on_text_delta: fn(String) -> Nil,
+) -> Result(ProviderResponse, RuntimeError) {
+  let body = build_body(config, provider_request, True)
+  let headers = build_headers(config)
+
+  let callback = fn(line: String) {
+    case parse_sse_line(line) {
+      DataChunk(payload_json) ->
+        case response.decode_stream_delta(payload_json) {
+          Ok(delta) ->
+            case delta.content_delta != "" {
+              True -> on_text_delta(delta.content_delta)
+              False -> Nil
+            }
+          Error(_) -> Nil
+        }
+      _ -> Nil
+    }
+  }
+
+  let transcript_result =
+    post_sse(config.base_url, headers, body, callback)
+    |> result.map_error(fn(message) { ProviderError(message) })
+
+  use transcript <- result.try(transcript_result)
+
+  transcript_to_response(transcript)
+}
+
+type StreamChunk {
+  EndOfStream
+  DataChunk(payload_json: String)
+  Ignore
+}
+
+fn parse_sse_line(line: String) -> StreamChunk {
+  let trimmed = string.trim(line)
+
+  case trimmed {
+    "" -> Ignore
+    "data: [DONE]" -> EndOfStream
+    _ ->
+      case string.starts_with(trimmed, "data: ") {
+        True -> DataChunk(string.drop_start(trimmed, 6))
+        False -> Ignore
+      }
+  }
+}
+
+fn transcript_to_response(
+  transcript: String,
+) -> Result(ProviderResponse, RuntimeError) {
+  let final_state =
+    list.fold(
+      over: string.split(transcript, on: "\n"),
+      from: response.new_stream_state(),
+      with: fn(state, line) {
+        case parse_sse_line(line) {
+          DataChunk(payload_json) ->
+            case response.decode_stream_delta(payload_json) {
+              Ok(delta) -> response.apply_stream_delta(state, delta)
+              Error(_) -> state
+            }
+          _ -> state
+        }
+      },
+    )
+
+  Ok(response.finalize_stream_state(final_state))
+}
+
+fn build_body(
+  config: Config,
+  provider_request: ProviderRequest,
+  stream_mode: Bool,
+) -> String {
+  openrouter_request.build_json(
+    model: config.model,
+    instructions: provider_request.instructions,
+    input: provider_request.input,
+    tools: provider_request.tools,
+    stream: stream_mode,
+  )
+}
+
+fn add_headers(
+  http_request: request.Request(String),
+  config: Config,
+) -> request.Request(String) {
+  list.fold(
+    over: build_headers(config),
+    from: http_request,
+    with: fn(acc, header) { request.prepend_header(acc, header.0, header.1) },
+  )
+}
+
+fn build_headers(config: Config) -> List(#(String, String)) {
+  let base_headers = [
+    #("authorization", "Bearer " <> config.api_key),
+    #("content-type", "application/json"),
+  ]
+
+  let with_app_url = case config.app_url {
+    Some(app_url) -> [#("http-referer", app_url), ..base_headers]
+    None -> base_headers
+  }
+
+  case config.app_name {
+    Some(app_name) -> [#("x-title", app_name), ..with_app_url]
+    None -> with_app_url
+  }
+}
