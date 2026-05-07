@@ -1,6 +1,9 @@
 .env
-
 config.yaml
+*.beam
+*.ez
+/build
+erl_crash.dump
 
 
 docs/superpowers
