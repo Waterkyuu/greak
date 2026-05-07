@@ -1,0 +1,16 @@
+#!/bin/sh
+set -eu
+
+message_file="$1"
+subject="$(sed -n '1p' "$message_file")"
+body_lines="$(sed '1d' "$message_file" | grep -v '^Co-authored-by:' | grep -v '^[[:space:]]*$' | wc -l)"
+
+if [ -z "$subject" ]; then
+  echo "Commit subject is required."
+  exit 1
+fi
+
+if [ "$body_lines" -lt 1 ]; then
+  echo "Commit body is required. Please explain what changed."
+  exit 1
+fi

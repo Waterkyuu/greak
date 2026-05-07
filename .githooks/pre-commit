@@ -1,0 +1,11 @@
+#!/bin/sh
+set -eu
+
+echo "Running gleam format check..."
+gleam format --check .
+
+echo "Running gleam tests..."
+gleam test
+
+echo "Running gleam build..."
+gleam build
