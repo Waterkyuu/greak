@@ -36,18 +36,6 @@ The demo prints intermediate runtime events such as:
 - generated plans
 - final usage totals
 
-## Use Greak As a Library
-
-The main pieces are:
-
-- `greak/model/openai/client`: create an OpenAI provider
-- `greak/model/openrouter/client`: create an OpenRouter provider
-- `greak/agent/react`: run a ReAct agent loop
-- `greak/agent/planner`: generate a plan from a goal
-- `greak/agent/executor`: execute a plan step by step
-- `greak/tool/definition`: define tools
-- `greak/tool/registry`: register tools
-
 ### Define a Tool
 
 ```gleam
@@ -212,19 +200,3 @@ pub fn print_event(run_event: event.RunEvent) {
 
 Then pass `print_event` into `react.run`, `planner.run`, or
 `executor.run_plan`.
-
-## Development
-
-Local quality checks:
-
-```sh
-gleam format
-gleam test
-gleam build
-```
-
-Shared git hooks can be enabled with:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/setup_git_hooks.ps1
-```
