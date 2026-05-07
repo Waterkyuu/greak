@@ -9,8 +9,8 @@ It currently provides:
 - OpenAI Responses API support
 - OpenRouter chat-completions support
 - streaming and non-streaming execution
-- a ReAct-style agent loop
-- planner and executor agent modes
+- reAct agent mode
+- planner and executor agent mode
 
 ## Quick Start
 
