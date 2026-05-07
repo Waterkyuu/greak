@@ -1,4 +1,4 @@
-# Greak
+# 🪄 Greak
 
 Greak is a Gleam agent runtime for building tool-using LLM workflows.
 
