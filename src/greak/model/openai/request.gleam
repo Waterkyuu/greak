@@ -3,7 +3,9 @@ import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/string
 
-import greak/core/message.{type InputItem, FunctionCallOutput, UserText}
+import greak/core/message.{
+  type InputItem, FunctionCallOutput, FunctionCallRequest, UserText,
+}
 import greak/tool/definition.{type ToolDefinition}
 
 pub fn build_json(
@@ -58,6 +60,13 @@ fn encode_input_item(item: InputItem) -> String {
         #("type", quote("function_call_output")),
         #("call_id", quote(call_id)),
         #("output", quote(output)),
+      ])
+    FunctionCallRequest(call_id, name, arguments_json) ->
+      encode_object([
+        #("type", quote("function_call")),
+        #("call_id", quote(call_id)),
+        #("name", quote(name)),
+        #("arguments", quote(arguments_json)),
       ])
   }
 }

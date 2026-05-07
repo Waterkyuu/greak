@@ -9,11 +9,12 @@ import greak/core/event.{
 }
 import greak/core/message.{
   type AgentResult, type InputItem, type ToolCall, AgentResult,
-  FunctionCallOutput, UserText,
+  FunctionCallOutput, FunctionCallRequest, UserText,
 }
 import greak/core/usage as runtime_usage
 import greak/model/provider.{
-  type Provider, type ProviderRequest, ProviderRequest, invoke, invoke_stream,
+  type Provider, type ProviderRequest, ProviderRequest, StatefulConversation,
+  StatelessConversation, conversation_mode, invoke, invoke_stream,
 }
 import greak/tool/registry.{type ToolRegistry, execute, to_list}
 
@@ -96,12 +97,24 @@ fn loop(
     }
     tool_calls -> {
       use next_input <- result.try(execute_tool_calls(tool_calls, tools, emit))
+
+      let next_request_input = case conversation_mode(config.provider) {
+        StatefulConversation -> next_input
+        StatelessConversation ->
+          list.append(request.input, build_tool_history(tool_calls, next_input))
+      }
+
+      let next_previous_response_id = case conversation_mode(config.provider) {
+        StatefulConversation -> Some(provider_response.response_id)
+        StatelessConversation -> None
+      }
+
       let next_request =
         ProviderRequest(
           instructions: config.system_prompt,
-          input: next_input,
+          input: next_request_input,
           tools: request.tools,
-          previous_response_id: Some(provider_response.response_id),
+          previous_response_id: next_previous_response_id,
         )
 
       loop(config, tools, next_request, accumulated_usage, emit)
@@ -132,4 +145,21 @@ fn execute_tool_calls(
       }
     }),
   )
+}
+
+fn build_tool_history(
+  tool_calls: List(ToolCall),
+  outputs: List(InputItem),
+) -> List(InputItem) {
+  let call_requests =
+    tool_calls
+    |> list.map(fn(tool_call) {
+      FunctionCallRequest(
+        call_id: tool_call.call_id,
+        name: tool_call.name,
+        arguments_json: tool_call.arguments_json,
+      )
+    })
+
+  list.append(call_requests, outputs)
 }

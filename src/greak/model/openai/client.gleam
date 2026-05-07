@@ -10,7 +10,8 @@ import greak/model/openai/request as openai_request
 import greak/model/openai/response
 import greak/model/openai/stream
 import greak/model/provider.{
-  type Provider, type ProviderRequest, type ProviderResponse, new,
+  type Provider, type ProviderRequest, type ProviderResponse,
+  StatefulConversation, new,
 }
 
 @external(erlang, "greak_openai_stream_ffi", "post_sse")
@@ -23,6 +24,7 @@ fn post_sse(
 
 pub fn provider(config: Config) -> Provider {
   new(
+    conversation_mode: StatefulConversation,
     invoke: fn(provider_request) { invoke(config, provider_request) },
     invoke_stream: fn(provider_request, on_text_delta) {
       invoke_stream(config, provider_request, on_text_delta)

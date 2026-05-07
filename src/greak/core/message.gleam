@@ -2,6 +2,7 @@ import greak/core/usage.{type Usage}
 
 pub type InputItem {
   UserText(text: String)
+  FunctionCallRequest(call_id: String, name: String, arguments_json: String)
   FunctionCallOutput(call_id: String, output: String)
 }
 

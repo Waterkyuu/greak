@@ -5,6 +5,11 @@ import greak/core/message.{type InputItem, type ToolCall}
 import greak/core/usage.{type Usage}
 import greak/tool/definition.{type ToolDefinition}
 
+pub type ConversationMode {
+  StatefulConversation
+  StatelessConversation
+}
+
 pub type ProviderRequest {
   ProviderRequest(
     instructions: String,
@@ -25,6 +30,7 @@ pub type ProviderResponse {
 
 pub type Provider {
   Provider(
+    conversation_mode: ConversationMode,
     invoke: fn(ProviderRequest) -> Result(ProviderResponse, RuntimeError),
     invoke_stream: fn(ProviderRequest, fn(String) -> Nil) ->
       Result(ProviderResponse, RuntimeError),
@@ -32,11 +38,12 @@ pub type Provider {
 }
 
 pub fn new(
+  conversation_mode conversation_mode: ConversationMode,
   invoke invoke: fn(ProviderRequest) -> Result(ProviderResponse, RuntimeError),
   invoke_stream invoke_stream: fn(ProviderRequest, fn(String) -> Nil) ->
     Result(ProviderResponse, RuntimeError),
 ) -> Provider {
-  Provider(invoke:, invoke_stream:)
+  Provider(conversation_mode:, invoke:, invoke_stream:)
 }
 
 pub fn invoke(
@@ -44,6 +51,10 @@ pub fn invoke(
   request: ProviderRequest,
 ) -> Result(ProviderResponse, RuntimeError) {
   provider.invoke(request)
+}
+
+pub fn conversation_mode(provider: Provider) -> ConversationMode {
+  provider.conversation_mode
 }
 
 pub fn invoke_stream(
