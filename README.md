@@ -7,12 +7,14 @@ It currently provides:
 - prompt templates
 - in-process function calling
 - OpenAI Responses API support
+- OpenRouter chat-completions support
 - streaming and non-streaming execution
 - a ReAct-style agent loop
+- planner and executor agent modes
 
 ## Quick Start
 
-The repository includes a local CLI demo.
+The repository includes a local CLI demo for the OpenAI provider.
 
 Set your API key:
 
@@ -31,14 +33,18 @@ The demo prints intermediate runtime events such as:
 - response deltas
 - requested tool calls
 - tool call results
+- generated plans
 - final usage totals
 
 ## Use Greak As a Library
 
 The main pieces are:
 
-- `greak/model/openai/client`: create a provider
+- `greak/model/openai/client`: create an OpenAI provider
+- `greak/model/openrouter/client`: create an OpenRouter provider
 - `greak/agent/react`: run a ReAct agent loop
+- `greak/agent/planner`: generate a plan from a goal
+- `greak/agent/executor`: execute a plan step by step
 - `greak/tool/definition`: define tools
 - `greak/tool/registry`: register tools
 
@@ -57,7 +63,7 @@ pub fn echo_tool() {
 }
 ```
 
-### Run a ReAct Agent
+### Run a ReAct Agent with OpenAI
 
 ```gleam
 import greak/agent/react
@@ -81,10 +87,102 @@ pub fn run_agent(api_key: String) {
       "You are a helpful assistant. Use tools when they help.",
       True,
     )
+    |> react.with_max_iterations(30)
 
   react.run(agent, tools, "Use the echo tool to repeat hello", fn(_event) {
     Nil
   })
+}
+```
+
+### Run a ReAct Agent with OpenRouter
+
+```gleam
+import greak/agent/react
+import greak/model/openrouter/client
+import greak/model/openrouter/config
+import greak/tool/registry
+
+pub fn run_agent(api_key: String) {
+  let provider =
+    config.new(api_key, "openai/gpt-4.1-mini")
+    |> config.with_app_name("greak-demo")
+    |> client.provider
+
+  let tools =
+    registry.from_list([
+      echo_tool(),
+    ])
+
+  let agent =
+    react.new(
+      provider,
+      "You are a helpful assistant. Use tools when they help.",
+      True,
+    )
+
+  react.run(agent, tools, "Use the echo tool to repeat hello", fn(_event) {
+    Nil
+  })
+}
+```
+
+### Generate a Plan
+
+```gleam
+import greak/agent/planner
+import greak/model/openrouter/client
+import greak/model/openrouter/config
+import greak/tool/registry
+
+pub fn make_plan(api_key: String) {
+  let provider =
+    config.new(api_key, "openai/gpt-4.1-mini")
+    |> client.provider
+
+  let planner =
+    planner.new(provider, False)
+    |> planner.with_max_iterations(10)
+
+  planner.run(
+    planner,
+    registry.from_list([]),
+    "Design and implement a weather assistant",
+    fn(_event) { Nil },
+  )
+}
+```
+
+### Execute a Plan
+
+```gleam
+import greak/agent/executor
+import greak/core/message.{Plan}
+import greak/model/openrouter/client
+import greak/model/openrouter/config
+import greak/tool/registry
+
+pub fn execute_plan(api_key: String) {
+  let provider =
+    config.new(api_key, "openai/gpt-4.1-mini")
+    |> client.provider
+
+  let executor =
+    executor.new(provider, False)
+    |> executor.with_max_iterations(10)
+
+  let plan =
+    Plan(
+      steps: ["Gather requirements", "Implement the provider", "Run tests"],
+      raw_text: "",
+    )
+
+  executor.run_plan(
+    executor,
+    registry.from_list([]),
+    plan,
+    fn(_event) { Nil },
+  )
 }
 ```
 
@@ -93,6 +191,7 @@ pub fn run_agent(api_key: String) {
 You can stream events while the agent is running:
 
 ```gleam
+import gleam/int
 import gleam/io
 import greak/core/event
 
@@ -102,6 +201,8 @@ pub fn print_event(run_event: event.RunEvent) {
     event.ResponseDelta(chunk) -> io.println("[delta] " <> chunk)
     event.ToolCallRequested(tool_call) ->
       io.println("[tool] " <> tool_call.name)
+    event.PlanProduced(steps) ->
+      io.println("[plan] " <> int.to_string(list.length(steps)) <> " steps")
     event.UsageUpdated(usage) ->
       io.println("[usage] " <> int.to_string(usage.total_tokens))
     _ -> Nil
@@ -109,4 +210,21 @@ pub fn print_event(run_event: event.RunEvent) {
 }
 ```
 
-Then pass `print_event` into `react.run`.
+Then pass `print_event` into `react.run`, `planner.run`, or
+`executor.run_plan`.
+
+## Development
+
+Local quality checks:
+
+```sh
+gleam format
+gleam test
+gleam build
+```
+
+Shared git hooks can be enabled with:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/setup_git_hooks.ps1
+```

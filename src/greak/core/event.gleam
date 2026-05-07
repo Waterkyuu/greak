@@ -8,6 +8,7 @@ pub type RunEvent {
   ResponseDelta(chunk: String)
   ToolCallRequested(tool_call: ToolCall)
   ToolCallCompleted(call_id: String, name: String, result_json: String)
+  PlanProduced(steps: List(String))
   UsageUpdated(usage: Usage)
   RunCompleted(output_text: String, usage: Usage)
   RunFailed(message: String)

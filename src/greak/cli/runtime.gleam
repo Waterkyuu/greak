@@ -1,5 +1,6 @@
 import gleam/int
 import gleam/io
+import gleam/list
 import gleam/option.{type Option}
 
 import greak/core/error
@@ -24,6 +25,8 @@ pub fn print_event(run_event: event.RunEvent) -> Nil {
       )
     event.ToolCallCompleted(call_id: _, name: name, result_json: result_json) ->
       io.println("[tool] result " <> name <> " " <> result_json)
+    event.PlanProduced(steps: steps) ->
+      io.println("[plan] " <> int.to_string(list.length(steps)) <> " steps")
     event.UsageUpdated(usage: usage) ->
       io.println(
         "[usage] input="
