@@ -1,6 +1,7 @@
 import gleam/option.{None, Some}
 
 import greak/agent/react
+import greak/core/error
 import greak/core/message.{ToolCall}
 import greak/core/usage
 import greak/model/provider
@@ -134,4 +135,44 @@ pub fn react_replays_tool_history_for_stateless_provider_test() {
     react.run(agent, tools, "Use the echo tool", fn(_) { Nil })
 
   assert result.output_text == "stateless-ok"
+}
+
+pub fn react_stops_when_max_iterations_is_exceeded_test() {
+  let sync_invoke = fn(_) {
+    Ok(provider.ProviderResponse(
+      response_id: "resp_loop",
+      output_text: "",
+      tool_calls: [
+        ToolCall(
+          call_id: "call_loop",
+          name: "echo",
+          arguments_json: "{\"value\":\"loop\"}",
+        ),
+      ],
+      usage: usage.add(usage.new(), input_tokens: 1, output_tokens: 1),
+    ))
+  }
+
+  let fake_provider =
+    provider.new(
+      conversation_mode: provider.StatefulConversation,
+      invoke: sync_invoke,
+      invoke_stream: fn(request, _) { sync_invoke(request) },
+    )
+
+  let tool =
+    definition.new(
+      name: "echo",
+      description: "Echoes",
+      parameters_json_schema: "{\"type\":\"object\"}",
+      execute: fn(_) { Ok("loop") },
+    )
+
+  let agent =
+    react.new(fake_provider, "You are helpful.", False)
+    |> react.with_max_iterations(1)
+  let tools = registry.from_list([tool])
+
+  assert react.run(agent, tools, "Keep looping", fn(_) { Nil })
+    == Error(error.MaxIterationsExceeded(1))
 }

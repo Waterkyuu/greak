@@ -2,7 +2,7 @@ import gleam/list
 import gleam/option.{None, Some}
 import gleam/result
 
-import greak/core/error.{type RuntimeError, describe}
+import greak/core/error.{type RuntimeError, MaxIterationsExceeded, describe}
 import greak/core/event.{
   type RunEvent, RequestBuilt, ResponseDelta, ResponseStarted, RunCompleted,
   RunFailed, RunStarted, ToolCallCompleted, ToolCallRequested, UsageUpdated,
@@ -19,7 +19,12 @@ import greak/model/provider.{
 import greak/tool/registry.{type ToolRegistry, execute, to_list}
 
 pub type ReactConfig {
-  ReactConfig(provider: Provider, system_prompt: String, stream: Bool)
+  ReactConfig(
+    provider: Provider,
+    system_prompt: String,
+    stream: Bool,
+    max_iterations: Int,
+  )
 }
 
 pub fn new(
@@ -27,7 +32,19 @@ pub fn new(
   system_prompt: String,
   stream: Bool,
 ) -> ReactConfig {
-  ReactConfig(provider:, system_prompt:, stream:)
+  ReactConfig(
+    provider: provider,
+    system_prompt: system_prompt,
+    stream: stream,
+    max_iterations: 30,
+  )
+}
+
+pub fn with_max_iterations(
+  config: ReactConfig,
+  max_iterations: Int,
+) -> ReactConfig {
+  ReactConfig(..config, max_iterations:)
 }
 
 pub fn run(
@@ -46,7 +63,7 @@ pub fn run(
       previous_response_id: None,
     )
 
-  case loop(config, tools, request, runtime_usage.new(), emit) {
+  case loop(config, tools, request, runtime_usage.new(), emit, 0) {
     Ok(result) -> Ok(result)
     Error(error) -> {
       emit(RunFailed(describe(error)))
@@ -61,6 +78,29 @@ fn loop(
   request: ProviderRequest,
   accumulated_usage: runtime_usage.Usage,
   emit: fn(RunEvent) -> Nil,
+  iteration_count: Int,
+) -> Result(AgentResult, RuntimeError) {
+  case iteration_count >= config.max_iterations {
+    True -> Error(MaxIterationsExceeded(config.max_iterations))
+    False ->
+      continue_loop(
+        config,
+        tools,
+        request,
+        accumulated_usage,
+        emit,
+        iteration_count,
+      )
+  }
+}
+
+fn continue_loop(
+  config: ReactConfig,
+  tools: ToolRegistry,
+  request: ProviderRequest,
+  accumulated_usage: runtime_usage.Usage,
+  emit: fn(RunEvent) -> Nil,
+  iteration_count: Int,
 ) -> Result(AgentResult, RuntimeError) {
   emit(RequestBuilt(config.stream))
   emit(ResponseStarted)
@@ -117,7 +157,14 @@ fn loop(
           previous_response_id: next_previous_response_id,
         )
 
-      loop(config, tools, next_request, accumulated_usage, emit)
+      loop(
+        config,
+        tools,
+        next_request,
+        accumulated_usage,
+        emit,
+        iteration_count + 1,
+      )
     }
   }
 }
