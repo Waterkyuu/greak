@@ -110,19 +110,3 @@ pub fn print_event(run_event: event.RunEvent) {
 ```
 
 Then pass `print_event` into `react.run`.
-
-## Development
-
-Local quality checks:
-
-```sh
-gleam format
-gleam test
-gleam build
-```
-
-Shared git hooks can be enabled with:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/setup_git_hooks.ps1
-```
